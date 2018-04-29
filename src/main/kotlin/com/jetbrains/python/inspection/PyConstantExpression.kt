@@ -3,11 +3,11 @@ package com.jetbrains.python.inspection
 import com.intellij.codeInspection.LocalInspectionToolSession
 import com.intellij.codeInspection.ProblemsHolder
 import com.intellij.psi.PsiElementVisitor
+import com.jetbrains.python.PyTokenTypes
 import com.jetbrains.python.inspections.PyInspection
 import com.jetbrains.python.inspections.PyInspectionVisitor
-import com.jetbrains.python.psi.PyBoolLiteralExpression
-import com.jetbrains.python.psi.PyIfPart
-import com.jetbrains.python.psi.PyIfStatement
+import com.jetbrains.python.psi.*
+import java.math.BigInteger
 
 
 class PyConstantExpression : PyInspection() {
@@ -30,9 +30,37 @@ class PyConstantExpression : PyInspection() {
 
         private fun processIfPart(pyIfPart: PyIfPart) {
             val condition = pyIfPart.condition
-            if (condition is PyBoolLiteralExpression) {
-                registerProblem(condition, "The condition is always ${condition.value}")
+            condition?.bool?.let {
+                registerProblem(condition, "The condition is always $it")
             }
         }
+
+        private val PyExpression.bool: Boolean?
+            get() = when (this) {
+                is PyBoolLiteralExpression -> value
+                is PyBinaryExpression -> bool
+                else -> null
+            }
+
+        private val PyExpression.bigInt: BigInteger?
+            get() = when (this) {
+                is PyNumericLiteralExpression -> this.bigIntegerValue
+                else -> null
+            }
+
+        private val PyBinaryExpression.bool: Boolean?
+            get() {
+                val leftOperand = leftExpression?.bigInt ?: return null
+                val rightOperand = rightExpression?.bigInt ?: return null
+                return when (operator) {
+                    PyTokenTypes.LT -> leftOperand < rightOperand
+                    PyTokenTypes.GT -> leftOperand > rightOperand
+                    PyTokenTypes.LE -> leftOperand <= rightOperand
+                    PyTokenTypes.GE -> leftOperand >= rightOperand
+                    PyTokenTypes.EQEQ -> leftOperand == rightOperand
+                    PyTokenTypes.NE -> leftOperand != rightOperand
+                    else -> null
+                }
+            }
     }
 }
