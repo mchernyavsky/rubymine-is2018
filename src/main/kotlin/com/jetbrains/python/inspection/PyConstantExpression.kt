@@ -40,12 +40,15 @@ class PyConstantExpression : PyInspection() {
                 is PyBoolLiteralExpression -> value
                 is PyBinaryExpression -> bool
                 is PyPrefixExpression -> bool
+                is PyParenthesizedExpression -> containedExpression?.bool
                 else -> null
             }
 
         private val PyExpression.bigInt: BigInteger?
             get() = when (this) {
                 is PyNumericLiteralExpression -> this.bigIntegerValue
+                is PyBinaryExpression -> bigInt
+                is PyParenthesizedExpression -> containedExpression?.bigInt
                 else -> null
             }
 
@@ -78,6 +81,21 @@ class PyConstantExpression : PyInspection() {
                 }
 
                 return null
+            }
+
+        private val PyBinaryExpression.bigInt: BigInteger?
+            get() {
+                val leftBigInt = leftExpression?.bigInt ?: return null
+                val rightBigInt = rightExpression?.bigInt ?: return null
+                return when (operator) {
+                    PyTokenTypes.PLUS -> leftBigInt + rightBigInt
+                    PyTokenTypes.MINUS -> leftBigInt - rightBigInt
+                    PyTokenTypes.MULT -> leftBigInt * rightBigInt
+                    PyTokenTypes.EXP -> leftBigInt.pow(rightBigInt.toInt())  // overflow
+                    PyTokenTypes.DIV -> if (rightBigInt != BigInteger.ZERO) (leftBigInt / rightBigInt) else null
+                    PyTokenTypes.PERC -> if (rightBigInt != BigInteger.ZERO) (leftBigInt % rightBigInt) else null
+                    else -> null
+                }
             }
 
         private val PyPrefixExpression.bool: Boolean?
