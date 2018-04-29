@@ -39,6 +39,7 @@ class PyConstantExpression : PyInspection() {
             get() = when (this) {
                 is PyBoolLiteralExpression -> value
                 is PyBinaryExpression -> bool
+                is PyPrefixExpression -> bool
                 else -> null
             }
 
@@ -50,15 +51,40 @@ class PyConstantExpression : PyInspection() {
 
         private val PyBinaryExpression.bool: Boolean?
             get() {
-                val leftOperand = leftExpression?.bigInt ?: return null
-                val rightOperand = rightExpression?.bigInt ?: return null
+                val leftBigInt = leftExpression?.bigInt
+                val rightBigInt = rightExpression?.bigInt
+                if (leftBigInt != null && rightBigInt != null) {
+                    return when (operator) {
+                        PyTokenTypes.LT -> leftBigInt < rightBigInt
+                        PyTokenTypes.GT -> leftBigInt > rightBigInt
+                        PyTokenTypes.LE -> leftBigInt <= rightBigInt
+                        PyTokenTypes.GE -> leftBigInt >= rightBigInt
+                        PyTokenTypes.EQEQ -> leftBigInt == rightBigInt
+                        PyTokenTypes.NE -> leftBigInt != rightBigInt
+                        else -> null
+                    }
+                }
+
+                val leftBool = leftExpression?.bool
+                val rightBool = rightExpression?.bool
+                if (leftBool != null && rightBool != null) {
+                    return when (operator) {
+                        PyTokenTypes.AND_KEYWORD -> leftBool && rightBool
+                        PyTokenTypes.OR_KEYWORD -> leftBool || rightBool
+                        PyTokenTypes.EQEQ -> leftBool == rightBool
+                        PyTokenTypes.NE -> leftBool != rightBool
+                        else -> null
+                    }
+                }
+
+                return null
+            }
+
+        private val PyPrefixExpression.bool: Boolean?
+            get() {
+                val operand = operand?.bool ?: return null
                 return when (operator) {
-                    PyTokenTypes.LT -> leftOperand < rightOperand
-                    PyTokenTypes.GT -> leftOperand > rightOperand
-                    PyTokenTypes.LE -> leftOperand <= rightOperand
-                    PyTokenTypes.GE -> leftOperand >= rightOperand
-                    PyTokenTypes.EQEQ -> leftOperand == rightOperand
-                    PyTokenTypes.NE -> leftOperand != rightOperand
+                    PyTokenTypes.NOT_KEYWORD -> !operand
                     else -> null
                 }
             }
