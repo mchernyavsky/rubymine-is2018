@@ -1,6 +1,5 @@
 package com.jetbrains.python.inspection
 
-/*
 import com.intellij.codeInspection.LocalInspectionToolSession
 import com.intellij.codeInspection.ProblemsHolder
 import com.intellij.psi.PsiElementVisitor
@@ -13,10 +12,11 @@ import com.jetbrains.python.psi.PyIfStatement
 
 class PyConstantExpression : PyInspection() {
 
-    override fun buildVisitor(holder: ProblemsHolder, isOnTheFly: Boolean,
-                              session: LocalInspectionToolSession): PsiElementVisitor {
-        return Visitor(holder, session)
-    }
+    override fun buildVisitor(
+            holder: ProblemsHolder,
+            isOnTheFly: Boolean,
+            session: LocalInspectionToolSession
+    ): PsiElementVisitor = Visitor(holder, session)
 
     class Visitor(holder: ProblemsHolder?, session: LocalInspectionToolSession) : PyInspectionVisitor(holder, session) {
 
@@ -31,9 +31,8 @@ class PyConstantExpression : PyInspection() {
         private fun processIfPart(pyIfPart: PyIfPart) {
             val condition = pyIfPart.condition
             if (condition is PyBoolLiteralExpression) {
-                registerProblem(condition, "The condition is always " + condition.value)
+                registerProblem(condition, "The condition is always ${condition.value}")
             }
         }
     }
 }
-*/
