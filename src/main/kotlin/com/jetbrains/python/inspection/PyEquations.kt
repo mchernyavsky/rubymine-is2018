@@ -24,10 +24,7 @@ private data class EqEquation(override val varName: String, val value: Int) : Va
             is NotEqEquation -> if (value != other.value) this else FailEquation
             is LowerEqualEquation -> if (value <= other.bound) this else FailEquation
             is GreaterEqualEquation -> if (value >= other.bound) this else FailEquation
-            is AndEquation -> other.equations.fold(this as Equation) { acc, next -> acc.merge(next) }
-            is OrEquation -> OrEquation(other.equations.map(this::merge).toSet())
-            is OkEquation -> this
-            else -> FailEquation
+            else -> mergeCommon(other)
         }
     }
 
@@ -45,10 +42,7 @@ private data class NotEqEquation(override val varName: String, val value: Int) :
             is NotEqEquation -> if (value == other.value) this else AndEquation(this, other)
             is LowerEqualEquation -> if (value <= other.bound) AndEquation(this, other) else other
             is GreaterEqualEquation -> if (value >= other.bound) AndEquation(this, other) else other
-            is AndEquation -> other.equations.fold(this as Equation) { acc, next -> acc.merge(next) }
-            is OrEquation -> OrEquation(other.equations.map(this::merge).toSet())
-            is OkEquation -> this
-            else -> FailEquation
+            else -> mergeCommon(other)
         }
     }
 
@@ -66,10 +60,7 @@ private data class LowerEqualEquation(override val varName: String, val bound: I
             is NotEqEquation -> if (other.value <= bound) AndEquation(this, other) else this
             is LowerEqualEquation -> if (bound <= other.bound) this else other
             is GreaterEqualEquation -> if (bound >= other.bound) AndEquation(this, other) else FailEquation
-            is AndEquation -> other.equations.fold(this as Equation) { acc, next -> acc.merge(next) }
-            is OrEquation -> OrEquation(other.equations.map(this::merge).toSet())
-            is OkEquation -> this
-            else -> FailEquation
+            else -> mergeCommon(other)
         }
     }
 
@@ -87,10 +78,7 @@ private data class GreaterEqualEquation(override val varName: String, val bound:
             is NotEqEquation -> if (other.value >= bound) AndEquation(this, other) else this
             is LowerEqualEquation -> if (bound <= other.bound) AndEquation(this, other) else FailEquation
             is GreaterEqualEquation -> if (bound >= other.bound) this else other
-            is AndEquation -> other.equations.fold(this as Equation) { acc, next -> acc.merge(next) }
-            is OrEquation -> OrEquation(other.equations.map(this::merge).toSet())
-            is OkEquation -> this
-            else -> FailEquation
+            else -> mergeCommon(other)
         }
     }
 
@@ -108,10 +96,7 @@ private data class AndEquation(val equations: Set<Equation>) : Equation {
         is NotEqEquation -> other.merge(this)
         is LowerEqualEquation -> other.merge(this)
         is GreaterEqualEquation -> other.merge(this)
-        is AndEquation -> other.equations.fold(this as Equation) { acc, next -> acc.merge(next) }
-        is OrEquation -> OrEquation(other.equations.map(this::merge).toSet())
-        is OkEquation -> this
-        else -> FailEquation
+        else -> mergeCommon(other)
     }
 
     override fun canSolve(): Boolean = equations.all { it.canSolve() }
@@ -128,10 +113,7 @@ private data class OrEquation(val equations: Set<Equation>) : Equation {
         is NotEqEquation -> other.merge(this)
         is LowerEqualEquation -> other.merge(this)
         is GreaterEqualEquation -> other.merge(this)
-        is AndEquation -> other.merge(this)
-        is OrEquation -> OrEquation(equations + other.equations)
-        is OkEquation -> this
-        else -> FailEquation
+        else -> mergeCommon(other)
     }
 
     override fun canSolve(): Boolean = equations.any { it.canSolve() }
@@ -147,6 +129,13 @@ private object FailEquation : Equation {
     override fun not(): Equation = OkEquation
     override fun merge(other: Equation): Equation = FailEquation
     override fun canSolve(): Boolean = false
+}
+
+private fun Equation.mergeCommon(other: Equation): Equation = when (other) {
+    is AndEquation -> other.equations.fold(this) { acc, next -> acc.merge(next) }
+    is OrEquation -> OrEquation(other.equations.map(this::merge).toSet())
+    is OkEquation -> this
+    else -> FailEquation
 }
 
 internal val PyExpression.equation: Equation
