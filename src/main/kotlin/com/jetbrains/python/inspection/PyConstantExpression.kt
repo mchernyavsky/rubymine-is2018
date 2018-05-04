@@ -54,6 +54,7 @@ internal val PyExpression.bigInt: BigInteger?
     get() = when (this) {
         is PyNumericLiteralExpression -> this.bigIntegerValue
         is PyBinaryExpression -> bigInt
+        is PyPrefixExpression -> bigInt
         is PyParenthesizedExpression -> containedExpression?.bigInt
         else -> null
     }
@@ -109,6 +110,15 @@ private val PyPrefixExpression.bool: Boolean?
         val operand = operand?.bool ?: return null
         return when (operator) {
             PyTokenTypes.NOT_KEYWORD -> !operand
+            else -> null
+        }
+    }
+
+private val PyPrefixExpression.bigInt: BigInteger?
+    get() {
+        val operand = operand?.bigInt ?: return null
+        return when (operator) {
+            PyTokenTypes.MINUS -> operand.negate()
             else -> null
         }
     }
