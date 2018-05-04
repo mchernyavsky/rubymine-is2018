@@ -55,7 +55,7 @@ private data class NotEqEquation(override val varName: String, val value: Int) :
 
 private data class LowerEqualEquation(override val varName: String, val bound: Int) : VariableRestriction {
 
-    override fun not(): Equation = GreaterEqualEquation(varName, bound - 1)
+    override fun not(): Equation = GreaterEqualEquation(varName, bound + 1)
 
     override fun merge(other: Equation): Equation {
         if (other is VariableRestriction && varName != other.varName) return AndEquation(this, other)
@@ -75,7 +75,7 @@ private data class LowerEqualEquation(override val varName: String, val bound: I
 
 private data class GreaterEqualEquation(override val varName: String, val bound: Int) : VariableRestriction {
 
-    override fun not(): Equation = LowerEqualEquation(varName, bound + 1)
+    override fun not(): Equation = LowerEqualEquation(varName, bound - 1)
 
     override fun merge(other: Equation): Equation {
         if (other is VariableRestriction && varName != other.varName) return AndEquation(this, other)
