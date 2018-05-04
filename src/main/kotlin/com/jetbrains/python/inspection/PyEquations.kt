@@ -232,7 +232,7 @@ private val PyBinaryExpression.equation: Equation
                 makeVariableRestriction(leftExpression.name, operator, rightExpression)
             rightExpression is PyReferenceExpression ->
                 makeVariableRestriction(rightExpression.name, operator?.flip, leftExpression)
-            else -> OkEquation
+            else -> if (bool == false || bigInt == BigInteger.ZERO) FailEquation else OkEquation
         }
     }
 
