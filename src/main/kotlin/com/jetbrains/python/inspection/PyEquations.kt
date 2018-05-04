@@ -2,6 +2,7 @@ package com.jetbrains.python.inspection
 
 import com.jetbrains.python.PyTokenTypes
 import com.jetbrains.python.psi.*
+import java.math.BigInteger
 
 internal interface Equation {
     fun not(): Equation
@@ -184,7 +185,7 @@ private object FailEquation : Equation {
 }
 
 private fun Equation.mergeCommon(other: Equation): Equation = when (other) {
-    is AndEquation -> other.equations.fold(this) { acc, next -> acc.merge(next) }
+    is AndEquation -> AndEquation(other.equations.map(this::merge).toSet())
     is OrEquation -> OrEquation(other.equations.map(this::merge).toSet())
     is OkEquation -> this
     else -> FailEquation
