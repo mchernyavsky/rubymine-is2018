@@ -30,13 +30,8 @@ class PyConstantExpression : PyInspection() {
 
         private fun processIfPart(pyIfPart: PyIfPart) {
             val condition = pyIfPart.condition ?: return
-            condition.bool?.let {
-                registerProblem(condition, "The condition is always $it")
-                return
-            }
-            if (!condition.equation.canSolve()) {
-                registerProblem(condition, "The condition is always false")
-            }
+            val result = condition.bool ?: condition.equation.solve() ?: return
+            registerProblem(condition, "The condition is always $result")
         }
     }
 }

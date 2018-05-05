@@ -2,12 +2,12 @@ package com.jetbrains.python.inspection
 
 import com.jetbrains.python.PyTokenTypes
 import com.jetbrains.python.psi.*
-import java.math.BigInteger
 
 internal interface Equation {
     fun not(): Equation
-    fun merge(other: Equation): Equation
-    fun canSolve(): Boolean
+    fun join(other: Equation): Equation
+    fun meet(other: Equation): Equation
+    fun solve(): Boolean? = null
 }
 
 private interface VariableRestriction : Equation {
@@ -18,177 +18,295 @@ private data class EqEquation(override val varName: String, val value: Int) : Va
 
     override fun not(): Equation = NotEqEquation(varName, value)
 
-    override fun merge(other: Equation): Equation {
-        if (other is VariableRestriction && varName != other.varName) return AndEquation(this, other)
+    override fun join(other: Equation): Equation {
+        if (other is VariableRestriction && varName != other.varName) return OrEquation(this, other)
         return when (other) {
-            is EqEquation -> if (value == other.value) this else FailEquation
-            is NotEqEquation -> if (value != other.value) this else FailEquation
-            is LowerEqualEquation -> if (value <= other.bound) this else FailEquation
-            is GreaterEqualEquation -> if (value >= other.bound) this else FailEquation
-            is TrulyEquation -> if (value != 0) this else FailEquation
-            is FalsyEquation -> if (value == 0) this else FailEquation
-            else -> mergeCommon(other)
+            is EqEquation,
+            is LowerEqualEquation,
+            is GreaterEqualEquation,
+            is TrulyEquation,
+            is FalsyEquation -> OrEquation(this, other)
+            is NotEqEquation -> if (value != other.value) OrEquation(this, other) else ConstTrueEquation
+            else -> joinCommon(other)
         }
     }
 
-    override fun canSolve(): Boolean = true
+    override fun meet(other: Equation): Equation {
+        if (other is VariableRestriction && varName != other.varName) return AndEquation(this, other)
+        return when (other) {
+            is EqEquation -> if (value == other.value) this else ConstFalseEquation
+            is NotEqEquation -> if (value != other.value) this else ConstFalseEquation
+            is LowerEqualEquation -> if (value <= other.bound) this else ConstFalseEquation
+            is GreaterEqualEquation -> if (value >= other.bound) this else ConstFalseEquation
+            is TrulyEquation -> if (value != 0) other else ConstFalseEquation
+            is FalsyEquation -> if (value == 0) other else ConstFalseEquation
+            else -> meetCommon(other)
+        }
+    }
 }
 
 private data class NotEqEquation(override val varName: String, val value: Int) : VariableRestriction {
 
     override fun not(): Equation = EqEquation(varName, value)
 
-    override fun merge(other: Equation): Equation {
-        if (other is VariableRestriction && varName != other.varName) return AndEquation(this, other)
+    override fun join(other: Equation): Equation {
+        if (other is VariableRestriction && varName != other.varName) return OrEquation(this, other)
         return when (other) {
-            is EqEquation -> if (value != other.value) other else FailEquation
-            is NotEqEquation -> if (value == other.value) this else AndEquation(this, other)
-            is LowerEqualEquation -> if (value <= other.bound) AndEquation(this, other) else other
-            is GreaterEqualEquation -> if (value >= other.bound) AndEquation(this, other) else other
-            is TrulyEquation -> this
-            is FalsyEquation -> if (value == 0) FailEquation else this
-            else -> mergeCommon(other)
+            is NotEqEquation,
+            is LowerEqualEquation,
+            is GreaterEqualEquation,
+            is TrulyEquation,
+            is FalsyEquation -> OrEquation(this, other)
+            is EqEquation -> if (value != other.value) OrEquation(this, other) else ConstTrueEquation
+            else -> joinCommon(other)
         }
     }
 
-    override fun canSolve(): Boolean = true
+    override fun meet(other: Equation): Equation {
+        if (other is VariableRestriction && varName != other.varName) return AndEquation(this, other)
+        return when (other) {
+            is NotEqEquation,
+            is LowerEqualEquation,
+            is TrulyEquation,
+            is GreaterEqualEquation -> AndEquation(this, other)
+            is FalsyEquation -> if (value != 0) AndEquation(this, other) else ConstFalseEquation
+            is EqEquation -> if (value != other.value) other else ConstFalseEquation
+            else -> meetCommon(other)
+        }
+    }
 }
 
 private data class LowerEqualEquation(override val varName: String, val bound: Int) : VariableRestriction {
 
     override fun not(): Equation = GreaterEqualEquation(varName, bound + 1)
 
-    override fun merge(other: Equation): Equation {
-        if (other is VariableRestriction && varName != other.varName) return AndEquation(this, other)
+    override fun join(other: Equation): Equation {
+        if (other is VariableRestriction && varName != other.varName) return OrEquation(this, other)
         return when (other) {
-            is EqEquation -> if (other.value <= bound) other else FailEquation
-            is NotEqEquation -> if (other.value <= bound) AndEquation(this, other) else this
-            is LowerEqualEquation -> if (bound <= other.bound) this else other
-            is GreaterEqualEquation -> if (bound >= other.bound) AndEquation(this, other) else FailEquation
-            is TrulyEquation -> this
-            is FalsyEquation -> if (bound >= 0) this else FailEquation
-            else -> mergeCommon(other)
+            is EqEquation,
+            is NotEqEquation,
+            is LowerEqualEquation,
+            is GreaterEqualEquation,
+            is TrulyEquation,
+            is FalsyEquation -> OrEquation(this, other)
+            else -> joinCommon(other)
         }
     }
 
-    override fun canSolve(): Boolean = true
+    override fun meet(other: Equation): Equation {
+        if (other is VariableRestriction && varName != other.varName) return AndEquation(this, other)
+        return when (other) {
+            is NotEqEquation,
+            is LowerEqualEquation,
+            is TrulyEquation -> AndEquation(this, other)
+            is EqEquation -> if (other.value <= bound) other else ConstFalseEquation
+            is GreaterEqualEquation -> if (bound >= other.bound) AndEquation(this, other) else ConstFalseEquation
+            is FalsyEquation -> if (bound >= 0) this else ConstFalseEquation
+            else -> meetCommon(other)
+        }
+    }
 }
 
 private data class GreaterEqualEquation(override val varName: String, val bound: Int) : VariableRestriction {
 
     override fun not(): Equation = LowerEqualEquation(varName, bound - 1)
 
-    override fun merge(other: Equation): Equation {
-        if (other is VariableRestriction && varName != other.varName) return AndEquation(this, other)
+    override fun join(other: Equation): Equation {
+        if (other is VariableRestriction && varName != other.varName) return OrEquation(this, other)
         return when (other) {
-            is EqEquation -> if (other.value >= bound) other else FailEquation
-            is NotEqEquation -> if (other.value >= bound) AndEquation(this, other) else this
-            is LowerEqualEquation -> if (bound <= other.bound) AndEquation(this, other) else FailEquation
-            is GreaterEqualEquation -> if (bound >= other.bound) this else other
-            is TrulyEquation -> this
-            is FalsyEquation -> if (bound <= 0) this else FailEquation
-            else -> mergeCommon(other)
+            is EqEquation,
+            is NotEqEquation,
+            is LowerEqualEquation,
+            is GreaterEqualEquation,
+            is TrulyEquation,
+            is FalsyEquation -> OrEquation(this, other)
+            else -> joinCommon(other)
         }
     }
 
-    override fun canSolve(): Boolean = true
+    override fun meet(other: Equation): Equation {
+        if (other is VariableRestriction && varName != other.varName) return AndEquation(this, other)
+        return when (other) {
+            is NotEqEquation,
+            is GreaterEqualEquation,
+            is TrulyEquation -> AndEquation(this, other)
+            is EqEquation -> if (other.value >= bound) other else ConstFalseEquation
+            is LowerEqualEquation -> if (bound <= other.bound) AndEquation(this, other) else ConstFalseEquation
+            is FalsyEquation -> if (bound <= 0) this else ConstFalseEquation
+            else -> meetCommon(other)
+        }
+    }
 }
 
 private class TrulyEquation(override val varName: String) : VariableRestriction {
 
     override fun not(): Equation = FalsyEquation(varName)
 
-    override fun merge(other: Equation): Equation {
-        if (other is VariableRestriction && varName != other.varName) return AndEquation(this, other)
+    override fun join(other: Equation): Equation {
+        if (other is VariableRestriction && varName != other.varName) return OrEquation(this, other)
         return when (other) {
-            is EqEquation -> if (other.value != 0) other else FailEquation
-            is NotEqEquation -> AndEquation(this, other)
-            is LowerEqualEquation -> AndEquation(this, other)
-            is GreaterEqualEquation -> AndEquation(this, other)
-            is TrulyEquation -> this
-            is FalsyEquation -> FailEquation
-            else -> mergeCommon(other)
+            is EqEquation,
+            is NotEqEquation,
+            is LowerEqualEquation,
+            is GreaterEqualEquation,
+            is TrulyEquation -> OrEquation(this, other)
+            is FalsyEquation -> ConstTrueEquation
+            else -> joinCommon(other)
         }
     }
 
-    override fun canSolve(): Boolean = true
+    override fun meet(other: Equation): Equation {
+        if (other is VariableRestriction && varName != other.varName) return AndEquation(this, other)
+        return when (other) {
+            is EqEquation -> if (other.value != 0) other else ConstFalseEquation
+            is NotEqEquation -> AndEquation(this, other)
+            is LowerEqualEquation -> if (other.bound >= 0) other else ConstFalseEquation
+            is GreaterEqualEquation -> if (other.bound <= 0) other else ConstFalseEquation
+            is TrulyEquation -> this
+            is FalsyEquation -> ConstFalseEquation
+            else -> meetCommon(other)
+        }
+    }
 }
 
 private class FalsyEquation(override val varName: String) : VariableRestriction {
 
     override fun not(): Equation = TrulyEquation(varName)
 
-    override fun merge(other: Equation): Equation {
-        if (other is VariableRestriction && varName != other.varName) return AndEquation(this, other)
+    override fun join(other: Equation): Equation {
+        if (other is VariableRestriction && varName != other.varName) return OrEquation(this, other)
         return when (other) {
-            is EqEquation -> if (other.value != 0) other else FailEquation
-            is NotEqEquation -> AndEquation(this, other)
-            is LowerEqualEquation -> AndEquation(this, other)
-            is GreaterEqualEquation -> AndEquation(this, other)
-            is TrulyEquation -> FailEquation
-            is FalsyEquation -> this
-            else -> mergeCommon(other)
+            is EqEquation,
+            is NotEqEquation,
+            is LowerEqualEquation,
+            is GreaterEqualEquation,
+            is FalsyEquation -> OrEquation(this, other)
+            is TrulyEquation -> ConstTrueEquation
+            else -> joinCommon(other)
         }
     }
 
-    override fun canSolve(): Boolean = true
+    override fun meet(other: Equation): Equation {
+        if (other is VariableRestriction && varName != other.varName) return AndEquation(this, other)
+        return when (other) {
+            is EqEquation -> if (other.value == 0) other else ConstFalseEquation
+            is NotEqEquation -> if (other.value != 0) this else ConstFalseEquation
+            is LowerEqualEquation -> if (other.bound >= 0) this else ConstFalseEquation
+            is GreaterEqualEquation -> if (other.bound <= 0) this else ConstFalseEquation
+            is TrulyEquation -> ConstFalseEquation
+            is FalsyEquation -> AndEquation(this, other)
+            else -> meetCommon(other)
+        }
+    }
 }
 
-private data class AndEquation(val equations: Set<Equation>) : Equation {
+private data class AndEquation(val first: Equation, val second: Equation) : Equation {
 
-    constructor(vararg equations: Equation): this(equations.toSet())
+    override fun not(): Equation = first.not().join(second.not())
 
-    override fun not(): Equation = OrEquation(equations.map { it.not() }.toSet())
-
-    override fun merge(other: Equation): Equation = when (other) {
-        is EqEquation -> other.merge(this)
-        is NotEqEquation -> other.merge(this)
-        is LowerEqualEquation -> other.merge(this)
-        is GreaterEqualEquation -> other.merge(this)
-        is TrulyEquation -> other.merge(this)
-        is FalsyEquation -> other.merge(this)
-        else -> mergeCommon(other)
+    override fun join(other: Equation): Equation = when (other) {
+        is EqEquation -> other.join(this)
+        is NotEqEquation -> other.join(this)
+        is LowerEqualEquation -> other.join(this)
+        is GreaterEqualEquation -> other.join(this)
+        is TrulyEquation -> other.join(this)
+        is FalsyEquation -> other.join(this)
+        else -> joinCommon(other)
     }
 
-    override fun canSolve(): Boolean = equations.all { it.canSolve() }
-}
-
-private data class OrEquation(val equations: Set<Equation>) : Equation {
-
-    constructor(vararg equations: Equation): this(equations.toSet())
-
-    override fun not(): Equation = AndEquation(equations.map { it.not() }.toSet())
-
-    override fun merge(other: Equation): Equation = when (other) {
-        is EqEquation -> other.merge(this)
-        is NotEqEquation -> other.merge(this)
-        is LowerEqualEquation -> other.merge(this)
-        is GreaterEqualEquation -> other.merge(this)
-        is TrulyEquation -> other.merge(this)
-        is FalsyEquation -> other.merge(this)
-        else -> mergeCommon(other)
+    override fun meet(other: Equation): Equation = when (other) {
+        is EqEquation -> other.meet(this)
+        is NotEqEquation -> other.meet(this)
+        is LowerEqualEquation -> other.meet(this)
+        is GreaterEqualEquation -> other.meet(this)
+        is TrulyEquation -> other.meet(this)
+        is FalsyEquation -> other.meet(this)
+        else -> meetCommon(other)
     }
 
-    override fun canSolve(): Boolean = equations.any { it.canSolve() }
+    override fun solve(): Boolean? {
+        val firstResult = first.solve()
+        val secondResult = second.solve()
+        return when {
+            firstResult == false || secondResult == false -> false
+            firstResult == null || secondResult == null -> null
+            else -> true
+        }
+    }
 }
 
-private object OkEquation : Equation {
-    override fun not(): Equation = FailEquation
-    override fun merge(other: Equation): Equation = other
-    override fun canSolve(): Boolean = true
+private data class OrEquation(val first: Equation, val second: Equation) : Equation {
+
+    override fun not(): Equation = first.not().meet(second.not())
+
+    override fun join(other: Equation): Equation = when (other) {
+        is EqEquation -> other.join(this)
+        is NotEqEquation -> other.join(this)
+        is LowerEqualEquation -> other.join(this)
+        is GreaterEqualEquation -> other.join(this)
+        is TrulyEquation -> other.join(this)
+        is FalsyEquation -> other.join(this)
+        else -> joinCommon(other)
+    }
+
+    override fun meet(other: Equation): Equation = when (other) {
+        is EqEquation -> other.meet(this)
+        is NotEqEquation -> other.meet(this)
+        is LowerEqualEquation -> other.meet(this)
+        is GreaterEqualEquation -> other.meet(this)
+        is TrulyEquation -> other.meet(this)
+        is FalsyEquation -> other.meet(this)
+        else -> meetCommon(other)
+    }
+
+    override fun solve(): Boolean? {
+        val firstResult = first.solve()
+        val secondResult = second.solve()
+        return when {
+            firstResult == true || secondResult == true -> true
+            firstResult == null || secondResult == null -> null
+            else -> false
+        }
+    }
 }
 
-private object FailEquation : Equation {
-    override fun not(): Equation = OkEquation
-    override fun merge(other: Equation): Equation = FailEquation
-    override fun canSolve(): Boolean = false
+private object ConstTrueEquation : Equation {
+    override fun not(): Equation = ConstFalseEquation
+    override fun join(other: Equation): Equation = ConstTrueEquation
+    override fun meet(other: Equation): Equation = other
+    override fun solve(): Boolean = true
 }
 
-private fun Equation.mergeCommon(other: Equation): Equation = when (other) {
-    is AndEquation -> AndEquation(other.equations.map(this::merge).toSet())
-    is OrEquation -> OrEquation(other.equations.map(this::merge).toSet())
-    is OkEquation -> this
-    else -> FailEquation
+private object ConstFalseEquation : Equation {
+    override fun not(): Equation = ConstTrueEquation
+    override fun join(other: Equation): Equation = other
+    override fun meet(other: Equation): Equation = ConstTrueEquation
+    override fun solve(): Boolean = false
+}
+
+private object UnknownEquation : Equation {
+    override fun not(): Equation = UnknownEquation
+    override fun join(other: Equation): Equation = if (other === ConstFalseEquation) ConstFalseEquation else this
+    override fun meet(other: Equation): Equation = if (other === ConstTrueEquation) ConstTrueEquation else this
+    override fun solve(): Boolean? = null
+}
+
+private fun Equation.joinCommon(other: Equation): Equation = when (other) {
+    is AndEquation -> AndEquation(join(other.first), join(other.second))
+    is OrEquation -> OrEquation(join(other.first), join(other.second))
+    is ConstTrueEquation,
+    is UnknownEquation,
+    is ConstFalseEquation -> other.join(this)
+    else -> this
+}
+
+private fun Equation.meetCommon(other: Equation): Equation = when (other) {
+    is AndEquation -> AndEquation(meet(other.first), meet(other.second))
+    is OrEquation -> OrEquation(meet(other.first), meet(other.second))
+    is ConstTrueEquation,
+    is UnknownEquation,
+    is ConstFalseEquation -> other.meet(this)
+    else -> this
 }
 
 internal val PyExpression.equation: Equation
@@ -197,13 +315,13 @@ internal val PyExpression.equation: Equation
         is PyPrefixExpression -> equation
         is PyReferenceExpression -> equation
         is PyParenthesizedExpression -> equation
-        else -> OkEquation
+        else -> UnknownEquation
     }
 
 private val PyBinaryExpression.equation: Equation
     get() {
         val leftExpression = leftExpression
-        val rightExpression = rightExpression ?: return OkEquation
+        val rightExpression = rightExpression ?: return UnknownEquation
 
         fun makeVariableRestriction(
                 name: String?,
@@ -211,7 +329,7 @@ private val PyBinaryExpression.equation: Equation
                 expression: PyExpression?
         ): Equation {
             val value = expression?.bigInt?.toInt()
-            if (name == null || value == null) return OkEquation
+            if (name == null || value == null) return UnknownEquation
             return when (operator) {
                 PyTokenTypes.LT -> LowerEqualEquation(name, value - 1)
                 PyTokenTypes.GT -> GreaterEqualEquation(name, value + 1)
@@ -219,37 +337,37 @@ private val PyBinaryExpression.equation: Equation
                 PyTokenTypes.GE -> GreaterEqualEquation(name, value)
                 PyTokenTypes.EQEQ -> EqEquation(name, value)
                 PyTokenTypes.NE -> NotEqEquation(name, value)
-                else -> OkEquation
+                else -> UnknownEquation
             }
         }
 
         return when {
-            operator == PyTokenTypes.AND_KEYWORD -> leftExpression.equation.merge(rightExpression.equation)
-            operator == PyTokenTypes.OR_KEYWORD -> OrEquation(leftExpression.equation, rightExpression.equation)
+            operator == PyTokenTypes.AND_KEYWORD -> leftExpression.equation.meet(rightExpression.equation)
+            operator == PyTokenTypes.OR_KEYWORD -> leftExpression.equation.join(rightExpression.equation)
             leftExpression is PyReferenceExpression && rightExpression is PyReferenceExpression ->
-                OkEquation  // TODO
+                UnknownEquation  // TODO
             leftExpression is PyReferenceExpression ->
                 makeVariableRestriction(leftExpression.name, operator, rightExpression)
             rightExpression is PyReferenceExpression ->
                 makeVariableRestriction(rightExpression.name, operator?.flip, leftExpression)
-            else -> if (bool == false || bigInt == BigInteger.ZERO) FailEquation else OkEquation
+            else -> UnknownEquation
         }
     }
 
 private val PyPrefixExpression.equation: Equation
     get() {
-        val operand = operand?.equation ?: return OkEquation
+        val operand = operand?.equation ?: return UnknownEquation
         return when (operator) {
             PyTokenTypes.NOT_KEYWORD -> operand.not()
-            else -> OkEquation
+            else -> UnknownEquation
         }
     }
 
 private val PyReferenceExpression.equation: Equation
-    get() = name?.let { TrulyEquation(it) } ?: OkEquation
+    get() = name?.let { TrulyEquation(it) } ?: UnknownEquation
 
 private val PyParenthesizedExpression.equation: Equation
-    get() = containedExpression?.equation ?: OkEquation
+    get() = containedExpression?.equation ?: UnknownEquation
 
 private val PyElementType.flip: PyElementType
     get() = when (this) {
