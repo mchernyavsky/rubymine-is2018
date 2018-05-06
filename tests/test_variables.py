@@ -17,3 +17,9 @@ if a > 10 or a < 20:  # The condition is always true
 
 if a > 1 or a <= 1:  # The condition is always true
     pass
+
+if a < 10 and False:  # The condition is always false
+    pass
+
+if a < 10 or True:  # The condition is always true
+    pass
