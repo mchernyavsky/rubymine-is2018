@@ -86,9 +86,9 @@ private data class LowerEqualEquation(override val varName: String, val bound: I
             is EqEquation,
             is NotEqEquation,
             is LowerEqualEquation,
-            is GreaterEqualEquation,
             is TrulyEquation,
             is FalsyEquation -> OrEquation(this, other)
+            is GreaterEqualEquation -> if (other.bound - bound > 1) OrEquation(this, other) else ConstTrueEquation
             else -> joinCommon(other)
         }
     }
@@ -116,10 +116,10 @@ private data class GreaterEqualEquation(override val varName: String, val bound:
         return when (other) {
             is EqEquation,
             is NotEqEquation,
-            is LowerEqualEquation,
             is GreaterEqualEquation,
             is TrulyEquation,
             is FalsyEquation -> OrEquation(this, other)
+            is LowerEqualEquation -> if (bound - other.bound > 1) OrEquation(this, other) else ConstTrueEquation
             else -> joinCommon(other)
         }
     }
