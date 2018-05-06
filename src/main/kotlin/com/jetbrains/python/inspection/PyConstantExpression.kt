@@ -72,17 +72,21 @@ private val PyBinaryExpression.bool: Boolean?
 
         val leftBool = leftExpression?.bool
         val rightBool = rightExpression?.bool
-        if (leftBool != null && rightBool != null) {
-            return when (operator) {
-                PyTokenTypes.AND_KEYWORD -> leftBool && rightBool
-                PyTokenTypes.OR_KEYWORD -> leftBool || rightBool
-                PyTokenTypes.EQEQ -> leftBool == rightBool
-                PyTokenTypes.NE -> leftBool != rightBool
+        return when (operator) {
+            PyTokenTypes.AND_KEYWORD -> when {
+                leftBool == true && rightBool == true -> true
+                leftBool == false || rightBool == false -> false
                 else -> null
             }
+            PyTokenTypes.OR_KEYWORD -> when {
+                leftBool == true || rightBool == true -> true
+                leftBool == false && rightBool == false -> false
+                else -> null
+            }
+            PyTokenTypes.EQEQ -> leftBool?.equals(rightBool)
+            PyTokenTypes.NE -> leftBool?.equals(rightBool)?.not()
+            else -> null
         }
-
-        return null
     }
 
 private val PyBinaryExpression.bigInt: BigInteger?
