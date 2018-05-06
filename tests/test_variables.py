@@ -11,3 +11,9 @@ if a and not a:  # The condition is always false
 
 if a or not a:  # The condition is always true
     pass
+
+if a > 10 or a < 20:  # The condition is always true
+    pass
+
+if a > 1 or a <= 1:  # The condition is always true
+    pass
